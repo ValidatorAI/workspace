@@ -1,0 +1,81 @@
+model:
+  base_url: ''
+  default: qwen/qwen3.8-flash
+  provider: openrouter
+_config_version: 51
+platform_toolsets:
+  cli:
+    - clarify
+    - connections
+    - context_engine
+    - cronjob
+    - delegation
+    - kanban
+    - memory
+    - session_search
+    - skills
+    - todo
+    - web
+known_plugin_toolsets:
+  cli:
+    - a2a
+known_builtin_toolsets:
+  cli:
+    - browser
+    - clarify
+    - code_execution
+    - computer_use
+    - connections
+    - context_engine
+    - cronjob
+    - delegation
+    - discord
+    - discord_admin
+    - file
+    - image_gen
+    - kanban
+    - memory
+    - session_search
+    - skills
+    - stt
+    - terminal
+    - todo
+    - tts
+    - video
+    - video_gen
+    - vision
+    - web
+    - x_search
+    - yuanbao
+stt:
+  enabled: false
+web:
+  backend: ddgs
+mcp_servers:
+  Knowledge:
+    headers:
+      Authorization: Bearer ${MCP_KNOWLEDGE_API_KEY}
+    url: http://localhost:3000/knowledge-mcp
+  pwr-action:
+    headers:
+      Authorization: Bearer ${MCP_KNOWLEDGE_API_KEY}
+    url: http://localhost:3000/action-mcp
+  pwr-read:
+    headers:
+      Authorization: Bearer ${MCP_KNOWLEDGE_API_KEY}
+    url: http://localhost:3000/read-mcp
+  pwr-task:
+    headers:
+      Authorization: Bearer ${MCP_KNOWLEDGE_API_KEY}
+    url: http://localhost:3000/task-mcp
+  pwr-config:
+    headers:
+      Authorization: Bearer ${MCP_KNOWLEDGE_API_KEY}
+    url: http://localhost:3000/config-mcp
+telemetry:
+  shared_metrics:
+    enabled: false
+    send: false
+    offer_version: 2
+API_SERVER_ENABLED: true
+API_SERVER_KEY: e035baab848ffd9b7cdadba57209623e231fe1a6895a19ec54e335490820f07b

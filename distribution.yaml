@@ -1,0 +1,11 @@
+name: workspace
+version: 0.0.1
+description: "workspace profile for analyzing what to do with incoming events and"
+author: siavashmohammadi
+env_requires:
+  - name: MCP_KNOWLEDGE_API_KEY
+    description: required credential copied from the source profile
+    required: true
+  - name: OPENROUTER_API_KEY
+    description: required credential copied from the source profile
+    required: true

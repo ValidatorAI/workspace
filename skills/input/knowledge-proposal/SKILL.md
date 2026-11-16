@@ -1,0 +1,74 @@
+---
+name: knowledge-proposal
+description: "events `knowledge_proposal_resolved`, `knowledge_proposal_dismissed`, or `knowledge_proposal_created`."
+---
+
+# Knowledge proposal (resolved / dismissed)
+
+Type: input-processing skill
+Apply when: events `knowledge_proposal_resolved`, `knowledge_proposal_dismissed`, or `knowledge_proposal_created`.
+
+## Procedure
+
+1. Read the item: `knowledge_proposals(item_id: <event_id>)` — proposals are captured knowledge awaiting human approval.
+2. `knowledge_proposal_resolved` — approved; adopt the knowledge, this is your core write path here:
+   - classify the proposal content into one of the 7 knowledge families (see `project knowledge` skill): fact/note → `add_project_note` or `add_project_knowledge_item`; decision → `add_project_decision_record`; reference/link → `add_external_knowledge_asset` (needs `url`); digest → `add_knowledge_summary_item`;
+   - check the target family for an equivalent first;
+   - `add_knowledge_activity_log(actor_name: "w-ai", action_text: "adopted proposal <id> into <family>", target_path: <matching knowledge_path line>)`;
+   - close the tracking task if one existed (`input_event_entity_id` lookup).
+3. `knowledge_proposal_dismissed` — rejected. Do not adopt. If the same proposal recurs, capture the rejection reason once as a `learnings` status item; reference the dismissed item id.
+   - Recurrence check = fuzzy scan of the project's FULL proposal list across ALL statuses, matching on title AND `meta_text` content ("cap guest tokens" vs "limit guest tokens" is the same proposal) — an exact-title check alone misses recurrences.
+   - Id-space trap: a task row with `id == <item_id>` is a coincidence, not a tracking task; tracking tasks reference the item via `input_event_entity_id` or in their description. Likewise, an open task about the SAME SUBJECT but created from a different source event (its own `input_event_entity_id`, e.g. a later directive message) is NOT this item's tracking task — a dismissal event must not close or edit it; its own handler manages it.
+   - If PWR's dismiss flow already resolved the item and there is no recurrence, the whole event outcome is no-action: no adoption, no learnings write, no edit, and no `create_tool_cal_log` (logs are only for state-changing calls).
+4. Never re-propose a dismissed item under a different title — that is how duplicates enter the knowledge base.
+
+## Tools used
+
+| Tool | Endpoint | Key arguments |
+|---|---|---|
+| `knowledge_proposals` (generic) | read-mcp + action-mcp | list = no args beyond filters; get/edit/delete = `item_id`; create = `title` |
+| `add_knowledge_proposals` | action-mcp | required: `title`; optional: `meta_text`, `action_label`, `due_at`, `overdue`, `project_id`/`project_name`, `room_id`/`room_name`, `user_id`/`user_name` |
+| `edit_knowledge_proposals` | action-mcp | required: `item_id`; writable: `title`, `meta_text`, `status`, `action_label`, `due_at`, `overdue` |
+| `attention_items` | read-mcp | cross-category list: `category`, `status`, `project_id`, `user_id` |
+| `delete_attention_item` | action-mcp | required: `item_id` — only for duplicate/erroneous items you created |
+| `tool_cal_logs` | knowledge-mcp | NO `target_entity_id` parameter — list by `project_id` (or `room_id`/`topic_id`/date range) and match the `target_entity_id` field in returned rows |
+| `add_project_note` | action-mcp | required: `title`; optional `content`, `tags`, `html_source_path/type` |
+| `add_project_knowledge_item` | action-mcp | required: `title`; optional `description`, `badge`, `active` |
+| `add_project_decision_record` | action-mcp | required: `identifier`, `title` |
+| `add_external_knowledge_asset` | action-mcp | required: `title`, `url`; optional `doc_type`, `source_type` |
+| `add_knowledge_summary_item` | action-mcp | required: `title`, `description` |
+| `add_knowledge_activity_log` | action-mcp | required: `actor_name`, `action_text` |
+
+## Example
+
+```json
+{"event_type": "knowledge_proposal_resolved", "event_id": 91,
+ "event_data": {"actor": {"username": "bob"}, "target_type": "AttentionItem",
+   "content": "proposal: document task-mcp immutability rule",
+   "content_payload": {"attention_item_id": 91, "project_id": 2,
+     "meta_text": "update_ai_task only writes description/adder/assignee/actual_context/dispatched/finished/topic_id"}}}
+```
+
+Run: `knowledge_proposals(item_id: 91)` → resolved/approved → classification: durable fact → `project_knowledge_items(project_id: 2)` → no equivalent → `add_project_knowledge_item(project_id: 2, title: "task-mcp: update_ai_task field immutability", description: "<meta_text> — source proposal 91")` → `add_knowledge_activity_log(project_id: 2, actor_name: "w-ai", action_text: "adopted proposal 91 into knowledge items")` → 2 logs.
+
+## Logging rule
+
+After **each** state-changing tool call, call `create_tool_cal_log` (knowledge-mcp):
+`{"used_tool_name": "<tool>", "project_id": ..., "room_id": ..., "topic_id": ..., "target_entity_id": "<entity touched>", "why_was_it_required": "<event_type>", "change_log": "<one line>"}`.
+
+## Guardrails
+
+- Read-before-write: never `add_*` into a category without listing that category for the same scope first — PWR has no dedupe tool.
+- Never overwrite existing text with `edit_*`: fetch, merge, write back.
+- Attention statuses are exactly `pending` / `resolved` / `dismissed`.
+- Event delivery is at-least-once: re-delivery has the same `group_id` / `event_type` / `event_id`. Check `tool_cal_logs` for prior entries whose `target_entity_id` is the item (list by `project_id` and scan — there is no server-side entity filter) before acting a second time.
+- Dismissal delivered right after creation: the created-event handler may already have read the item and logged a no-adoption verdict (dismissed at read time). The dismissed event then still needs the recurrence scan + `ai_tasks(input_event_entity_id)` check, but if both come back clean the outcome is no-action again — do not re-log what the created pass already logged.
+
+## `knowledge_proposal_created` (added 2026-11-13)
+
+Apply when: a `knowledge_proposal_created` event arrives.
+
+1. Read the item: `knowledge_proposals(item_id: <event_id>)`.
+2. Adoption happens ONLY on `knowledge_proposal_resolved` — at creation time you read and dedupe, nothing else.
+3. Dedupe pre-check: search the target knowledge families for an equivalent; if content already exists, note the duplicate via `edit_knowledge_proposals` (meta_text) or a room note — do not create anything.
+4. `create_tool_cal_log`: "proposal <id> registered; dedupe-checked against <families>".
